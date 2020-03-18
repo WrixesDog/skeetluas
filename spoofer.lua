@@ -1,4 +1,4 @@
-client.log("a nice SteamID Spoof lua)
+client.log("a nice SteamID Spoof lua")
 if (original_steam64 == nil) then
     original_steam64 = entity.get_steam64
     entity.get_steam64 = function(id)
