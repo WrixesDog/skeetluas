@@ -135,8 +135,7 @@ client.set_event_callback("paint", function()
 	if ui.get(Monke_yes) then
 		if not welcome then
 		notify:paint(15, "Enjoy!")
-		notify:paint(10, "loading: Auto.cfg")
-        notify:paint(5, "Monke is now enabled")
+        notify:paint(10, "Monke is now enabled")
 			welcome = true
 		end
 	else welcome = false end
