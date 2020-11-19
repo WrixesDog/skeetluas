@@ -1,0 +1,909 @@
+local ui_new_checkbox, ui_new_hotkey, ui_new_button, ui_new_multiselect, ui_get = ui.new_checkbox, ui.new_hotkey, ui.new_button, ui.new_multiselect, ui.get 
+local math_ceil, math_tan, math_cos, math_sinh, math_pi, math_max, math_atan2, math_floor, math_sqrt, math_deg, math_atan, math_fmod, math_acos = math.ceil, math.tan, math.cos, math.sinh, math.pi, math.max, math.atan2, math.floor, math.sqrt, math.deg, math.atan, math.fmod, math.acos 
+local math_pow, math_abs, math_min, math_sin, math_log, math_exp, math_cosh, math_asin, math_rad = math.pow, math.abs, math.min, math.sin, math.log, math.exp, math.cosh, math.asin, math.rad 
+local table_sort, table_remove, table_concat, table_insert = table.sort, table.remove, table.concat, table.insert 
+local client_draw_text, client_random_int, client_screen_size, client_set_event_callback, entity_get_local_player, entity_get_prop, globals_tickcount, math_sqrt, renderer_indicator, ui_get, ui_new_checkbox, ui_new_color_picker, ui_new_combobox, ui_new_hotkey, ui_new_multiselect, ui_reference, ui_set, ui_set_visible = client.draw_text, client.random_int, client.screen_size, client.set_event_callback, entity.get_local_player, entity.get_prop, globals.tickcount, math.sqrt, renderer.indicator, ui.get, ui.new_checkbox, ui.new_color_picker, ui.new_combobox, ui.new_hotkey, ui.new_multiselect, ui.reference, ui.set, ui.set_visible
+local string_find, string_format, string_gsub, string_len, string_gmatch, string_match, string_reverse, string_upper, string_lower, string_sub = string.find, string.format, string.gsub, string.len, string.gmatch, string.match, string.reverse, string.upper, string.lower, string.sub 
+local renderer_line, renderer_indicator, renderer_world_to_screen, renderer_circle_outline, renderer_rectangle, renderer_gradient, renderer_circle, renderer_text = renderer.line, renderer.indicator, renderer.world_to_screen, renderer.circle_outline, renderer.rectangle, renderer.gradient, renderer.circle, renderer.text 
+local client_set_event_callback, ui_get, ui_set, ui_new_checkbox, ui_new_combobox, ui_new_slider, ui_reference, ui_set_visible = client.set_event_callback, ui.get, ui.set, ui.new_checkbox, ui.new_combobox, ui.new_slider, ui.reference, ui.set_visible
+local table_pack, table_sort, table_remove, table_unpack, table_concat, table_insert = table.pack, table.sort, table.remove, table.unpack, table.concat, table.insert
+local globals_realtime, globals_absoluteframetime, globals_tickcount, globals_lastoutgoingcommand, globals_curtime, globals_mapname, globals_tickinterval, globals_framecount, globals_frametime, globals_maxplayers = globals.realtime, globals.absoluteframetime, globals.tickcount, globals.lastoutgoingcommand, globals.curtime, globals.mapname, globals.tickinterval, globals.framecount, globals.frametime, globals.maxplayers
+
+local notify = (function()
+    local notify = {callback_registered = false, maximum_count = 7, data = {}, svg_texture = [[]]}
+    local svg_size = { w = 10, h = 30}
+    local svg = renderer.load_svg(notify.svg_texture, svg_size.w, svg_size.h)
+    function notify:register_callback()
+        if self.callback_registered then return end
+        client.set_event_callback('paint_ui', function()
+            local screen = {client.screen_size()}
+            local color = {27, 27, 27}
+            local d = 5;
+            local data = self.data;
+            for f = #data, 1, -1 do
+                data[f].time = data[f].time - globals.frametime()
+                local alpha, h = 255, 0;
+                local _data = data[f]
+                if _data.time < 0 then
+                    table.remove(data, f)
+                else
+                    local time_diff = _data.def_time - _data.time;
+                    local time_diff = time_diff > 1 and 1 or time_diff;
+                    if _data.time < 0.5 or time_diff < 0.5 then
+                        h = (time_diff < 1 and time_diff or _data.time) / 0.5;
+                        alpha = h * 255;
+                        if h < 0.2 then
+                            d = d + 15 * (1.0 - h / 0.2)
+                        end
+                    end
+                    local text_data = {renderer.measure_text("dc", _data.draw)}
+                    local screen_data = {
+                        screen[1] / 2 - text_data[1] / 2 - 7, screen[2] - screen[2] / 200 * 12.4 + d
+                    }
+                    renderer.rectangle(screen_data[1] - 30, screen_data[2] - 550, text_data[1] + 60, 2, 227, 66, 245, alpha)
+                    renderer.rectangle(screen_data[1] - 29, screen_data[2] - 548, text_data[1] + 58, 38, color[1], color[2],color[3], alpha <= 135 and alpha or 135)
+                    renderer.rectangle(screen_data[1] - 30, screen_data[2] - 510, text_data[1] + 60, 2, 227, 66, 245, alpha)
+                    renderer.line(screen_data[1] - 30, screen_data[2] - 450, screen_data[1] - 30, screen_data[2] - 20 + 227, 66, 245, alpha <= 50 and alpha or 50)
+                    renderer.text(screen_data[1] + text_data[1] / 2 + 3, screen_data[2] - 530, 255, 255, 255, alpha, 'dc', nil, _data.draw)
+                    renderer.texture(svg, screen_data[1] - svg_size.w/2 - 5, screen_data[2] - svg_size.h/2 - 535, svg_size.w, svg_size.h, 227, 66, 245, alpha)
+                    d = d - 50
+                end
+            end
+            self.callback_registered = true
+        end)
+    end
+    function notify:paint(time, text)
+        local timer = tonumber(time) + 1;
+        for f = self.maximum_count, 2, -1 do
+            self.data[f] = self.data[f - 1]
+        end
+        self.data[1] = {time = timer, def_time = timer, draw = text}
+        self:register_callback()
+    end
+    return notify
+end)()
+
+
+local function enabled()
+
+-- Anti-Aim references
+local AA_EnabledButton = ui.reference("AA", "Anti-aimbot angles", "Enabled")
+local AA_Pitch = ui.reference("AA", "Anti-aimbot angles", "Pitch")
+local AA_Yaw_Base = ui.reference("AA", "Anti-aimbot angles", "Yaw Base")
+local AA_yaw, AA_yaw_s = ui.reference("AA", "Anti-aimbot angles", "Yaw")
+local AA_j_yaw, AA_j_yaw_s = ui.reference("AA", "Anti-aimbot angles", "Yaw jitter")
+local AA_b_yaw, AA_b_yaw_s = ui.reference("AA", "Anti-aimbot angles", "Body yaw")
+local AA_fby = ui.reference("AA", "Anti-aimbot angles", "Freestanding body yaw")
+local AA_lbyt = ui.reference("AA", "Anti-aimbot angles", "Lower body yaw target")
+local AA_fyaw_limit = ui.reference("AA", "Anti-aimbot angles", "Fake yaw limit")
+local AA_freestanding = ui.reference("AA", "Anti-aimbot angles", "Freestanding")
+local AA_edgeyaw = ui.reference("AA", "Anti-aimbot angles", "Edge yaw")
+
+-- Rage References
+local RAGE_SP = ui.reference("RAGE", "Aimbot", "Force Safe point")
+local RAGE_Baim = ui.reference("RAGE", "Other", "Force Body Aim")
+local RAGE_FD = ui.reference("RAGE", "Other", "Duck peek assist")
+local double_tap, double_tap_key = ui.reference("RAGE", "Other", "Double tap")
+local double_tap_mode = ui.reference("RAGE", "Other", "Double tap mode")
+local double_tap_FL_limit = ui.reference("RAGE", "Other", "Double tap fake lag limit")
+local sv_maxusrcmdprocessticks = ui.reference("MISC", "Settings", "sv_maxusrcmdprocessticks")
+
+-- Fakelag referencees
+local FL_enabledButton = ui.reference("AA", "Fake lag", "Enabled")
+local FL_amount = ui.reference("AA", "Fake lag", "Amount")
+local FL_variance = ui.reference("AA", "Fake lag", "Variance")
+local FL_limit = ui.reference("AA", "Fake lag", "Limit")
+
+-- AA Other 
+local O_slow = ui.reference("AA", "Other", "Slow motion")
+local O_slow_type = ui.reference("AA", "Other", "Slow motion Type")
+local O_leg_movement = ui.reference("AA", "Other", "Leg movement")
+local O_onshot = ui.reference("AA", "Other", "On shot anti-aim")
+local O_fake_peek = ui.reference("AA", "Other", "Fake peek")
+
+-- Menu Components
+local enabled = ui.new_checkbox("AA", "Anti-Aimbot angles", "Monke")
+ui.set_visible(enabled, false)
+ui.set(enabled, true)
+local warning1 = ui.new_label("AA", "Anti-aimbot angles", "                    Monke")
+local warning = ui.new_label("AA", "Anti-aimbot angles", " Welcome apes, enjoy the banana")
+local hideskeet = ui.new_checkbox("AA", "Anti-Aimbot angles", "           Show Debug Options")
+local AA_modes = ui.new_combobox("AA", "Anti-Aimbot angles", "                    Modes", "Disabled", "Simple", "Advanced", "Low delta", "Testing", "Antibrute")
+local invert = ui.new_hotkey("AA", "Anti-Aimbot angles", "              Manual Invert")
+local Monkeepeek = ui.new_hotkey("AA", "Anti-aimbot angles", "                   E Peek")
+local check = ui.new_checkbox("AA", "Anti-aimbot angles", "Anti-bruteforce")
+local combo = ui.new_combobox("AA", "Anti-aimbot angles", "Anti-bruteforce mode", { "Random"})
+ui.set_visible(check, false)
+ui.set_visible(combo, false)
+local ab_range = ui.new_slider("AA", "Anti-aimbot angles", "Anti-bruteforce range", 1, 60, 0)
+ui.set(hideskeet, false)
+local Monkespeed = ui.new_checkbox("AA", "Anti-aimbot angles", "                  Monke DT")
+local Monkespeed_mode = ui.new_combobox("Rage", "Other", "Increase double tap speed mode", {"Spicy", "Calm"})
+ui.set_visible(Monkespeed_mode, false)
+local dangrefmindmg = ui_reference("RAGE", "Aimbot", "Minimum damage")
+
+
+
+local Monke_yes = ui.new_checkbox("AA", "Anti-Aimbot angles", "Enable Settings")
+ui.set(Monke_yes, true)
+ui.set_visible(Monke_yes, false)
+ui.set_visible(Monke_login, false)
+ui.set_visible(lbl3, false)
+
+local welcome = false
+client.set_event_callback("paint", function()
+	if ui.get(Monke_yes) then
+		if not welcome then
+		notify:paint(15, "Enjoy!")
+		notify:paint(10, "loading: Auto.cfg")
+        notify:paint(5, "Monke is now enabled")
+			welcome = true
+		end
+	else welcome = false end
+	
+end)
+
+
+-- Indicators
+
+--DRAGGABLE
+local _draggable = (function()local a={}local b,c,d,e,f,g,h,i,j,k,l,m,n,o;local p={__index={drag=function(self,...)local q,r=self:get()local s,t=a.drag(q,r,...)if q~=s or r~=t then self:set(s,t)end;return s,t end,set=function(self,q,r)local j,k=client.screen_size()ui.set(self.x_reference,q/j*self.res)ui.set(self.y_reference,r/k*self.res)end,get=function(self)local j,k=client.screen_size()return ui.get(self.x_reference)/self.res*j,ui.get(self.y_reference)/self.res*k end}}function a.new(u,v,w,x)x=x or 10000;local j,k=client.screen_size()local y=ui.new_slider("LUA","A",u.." window position",0,x,v/j*x)local z=ui.new_slider("LUA","A","\n"..u.." window position y",0,x,w/k*x)ui.set_visible(y,false)ui.set_visible(z,false)return setmetatable({name=u,x_reference=y,y_reference=z,res=x},p)end;function a.drag(q,r,A,B,C,D,E)if globals.framecount()~=b then c=ui.is_menu_open()f,g=d,e;d,e=ui.mouse_position()i=h;h=client.key_state(0x01)==true;m=l;l={}o=n;n=false;j,k=client.screen_size()end;if c and i~=nil then if(not i or o)and h and f>q and g>r and f<q+A and g<r+B then n=true;q,r=q+d-f,r+e-g;if not D then q=math.max(0,math.min(j-A,q))r=math.max(0,math.min(k-B,r))end end end;table.insert(l,{q,r,A,B})return q,r,A,B end;return a end)()
+
+--SURFACE
+local renderer = require "gamesense/surface"
+
+--SCRIPT
+local script = {
+    _debug = false,
+
+    menu = { "AA", "Fake lag" },
+
+    indicator_options = { "Fake lag", "Desync", "Accuracy", "Speed", "Head height", "Ping spike", "Damage" },
+    exceptions = { "knife", "hegrenade", "inferno", "flashbang", "decoy", "smokegrenade" }
+}
+
+function script:call(func, name, ...)
+    if func == nil then
+        return
+    end
+
+    local end_name = name[2] or ""
+
+    if name[1] ~= nil then
+        end_name = end_name ~= "" and (string.format("%s ", end_name)) or end_name
+        end_name = string.format("%s\n%s", end_name, name[1])
+    end
+
+    return func(self.menu[1], self.menu[2], end_name, ...)
+end
+
+--CONTROLS
+local enabled = script:call(ui.new_checkbox, { "enabled" , "Enable Monke Indicators" })
+local clr_bg = script:call(ui.new_color_picker, { "clr_bg", "bg_color" }, 10, 10, 10, 0)
+ui.set_visible(clr_bg, false)
+
+local lbl_clr1 = script:call(ui.new_label, { "lbl_clr1", "Box primary color" })
+local clr1 = script:call(ui.new_color_picker, { "clr1", "clr1" }, 215, 48, 48, 220)
+
+local lbl_ac1 = script:call(ui.new_label, { "lbl_ac1", "Indicator bar accent" })
+local ac1 = script:call(ui.new_color_picker, { "ac1", "ac1" }, 217, 161, 161, 2)
+
+local lbl_ac2 = script:call(ui.new_label, { "lbl_ac2", "Secondary indicator accent" })
+local ac2 = script:call(ui.new_color_picker, { "ac2", "ac2" }, 215, 48, 48, 220)
+
+local ind_enabled = script:call(ui.new_checkbox, { "ind_enabled" , "Display custom indicators" })
+local ind_options = script:call(ui.new_multiselect, { "ind_options" , "Indicator options" }, script.indicator_options)
+local ind_remove = script:call(ui.new_checkbox, { "ind_remove" , "Remove default indicators" })
+
+local key_enabled = script:call(ui.new_checkbox, { "key_enabled" , "Display key status" })
+
+--REFERENCE
+local force_safe = ui.reference("rage", "Aimbot", "Force safe point")
+local minimum_damage = ui.reference("rage", "Aimbot", "Minimum damage")
+local quick_peek = { ui.reference("rage", "Other", "Quick peek assist") }
+local resolver_or = ui.reference("rage", "Other", "Anti-aim correction override")
+local force_baim = ui.reference("rage", "Other", "Force body aim")
+local duck_peek = ui.reference("rage", "Other", "Duck peek assist")
+local doubletap = { ui.reference("rage", "Other", "Double tap") }
+local doubletap_mode = ui.reference("rage", "Other", "Double tap mode")
+
+local onshot = { ui.reference("aa", "Other", "On shot anti-aim") }
+local slowmotion = { ui.reference("aa", "Other", "Slow motion") }
+local freestanding = { ui.reference("aa", "Anti-aimbot angles", "Freestanding") }
+
+local ping_spike = { ui.reference("misc", "Miscellaneous", "Ping spike") }
+local edge_jump = { ui.reference("misc", "Movement", "Jump at edge") }
+
+local maxprocessticks = ui.reference("misc", "Settings", "sv_maxusrcmdprocessticks")
+
+--VARS
+local size = {
+    x = 310,
+    y = 100 }
+local shots = {
+    hit = 0,
+    miss = 0 }
+local choked = 0
+local region = _draggable.new("Monke", 310, 100)
+local c_font = renderer.create_font("Small Fonts", 11, 400, {0x010, 0x200})
+
+-- Health esp
+
+local hpbar = {
+    customhealthbars = ui.new_combobox("LUA","A", "Custom healthbar", "Off", "Gamesense", "Fade", "Duo"),
+    ui.new_label("lua", "A", "Color 1"),
+    colorpicker = ui.new_color_picker("lua", "A", "Color picker", 40, 200, 64, 255),
+    ui.new_label("lua", "A", "Color 2"),
+    colorpicker2 = ui.new_color_picker("lua", "A", "Color picker2", 40, 155, 200, 255),
+    }
+    
+    client.set_event_callback("paint", function()
+    r, g, b, a = ui.get(hpbar.colorpicker)
+    r2, g2, b2, a2 = ui.get(hpbar.colorpicker2)
+    local enemy_players = entity.get_players(not enemies_only)
+    for i=1,#enemy_players do	
+        local e = enemy_players[i]
+        local x1, y1, x2, y2, a = entity.get_bounding_box(e)
+        if x1 ~= nil and y1 ~= nil then
+            local hp = entity.get_prop(e, "m_iHealth")
+            local height = y2 - y1 
+            local width = x2 - x1
+            local leftside = x1 - (width/12)
+            if hp ~= nil then
+            if ui.get(hpbar.customhealthbars) == "Off" then return else
+                renderer.rectangle(leftside-1, y1-1, 4, height+1, 20, 20, 20, 220)
+                    if ui.get(hpbar.customhealthbars) == "Gamesense" then
+                        renderer.rectangle(leftside, y2-(height*hp/100), 2, height*hp/100-1, r, g, b, 255)
+                    elseif ui.get(hpbar.customhealthbars) == "Fade" then
+                        renderer.gradient(leftside, y2-(height*hp/100), 2, height*hp/100-1, r, g, b, 40, r, g, b, 255, false)
+                    elseif ui.get(hpbar.customhealthbars) == "Duo" then
+                        renderer.gradient(leftside, y2-(height*hp/100), 2, height*hp/100-1, r, g, b, 255, r2, g2, b2, 255, false)
+                    end
+                        if hp < 100 then
+                            renderer.text(leftside, y2-(height*hp/100), 255, 255, 255, 255, "-cd", 0, hp )
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+-- End of health
+
+
+
+--#region HELPERS
+
+local multi_exec = function(func, list)
+    if func == nil then
+        return false                            
+    end
+    
+    for ref, val in pairs(list) do
+        func(ref, val)
+    end
+end
+
+local contains = function(tbl, val)
+    for i = 1, #tbl do
+        if tbl[i] == val then
+            return true
+        end
+    end
+    
+    return false
+end
+
+local vec_3 = function(_x, _y, _z) 
+	return { x = _x or 0, y = _y or 0, z = _z or 0 } 
+end
+
+local get_tbl_count = function(tbl)
+    local count = 0
+
+    for _ in pairs(tbl) do
+        count = count + 1 
+    end
+
+    return count
+end
+
+--#endregion
+
+--#region EVENTS
+local on_player_hurt = function(e)
+    local victim = client.userid_to_entindex(e.userid)
+    local attacker = client.userid_to_entindex(e.attacker)
+    local me = entity.get_local_player()
+
+    if (entity.is_enemy(victim) and attacker == me) then
+        for i = 1, #script.exceptions do
+            if e.weapon == script.exceptions[i] then
+                return
+            end
+        end
+
+        shots.hit = shots.hit + 1
+    end
+end
+
+local on_aim_miss = function(e)
+    shots.miss = shots.miss + 1
+end
+
+local on_player_connect_full = function(e)
+    if (client.userid_to_entindex(e.userid) ~= entity.get_local_player()) then
+        return
+    end
+
+    shots.miss, shots.hit = 0, 0
+end
+
+local on_setup_command = function(c)
+    choked = c.chokedcommands
+end
+
+local remove_indicators = function()
+    for i = 0, 50 do
+        renderer.indicator(0, 0, 0, 0, "...")
+    end
+end
+
+local on_paint = function()
+    local me = entity.get_local_player()
+
+    if ui.get(ind_remove) then
+        remove_indicators()
+    end
+
+    local x, y = region:get()
+    local bgr, bgg, bgb, bga = ui.get(clr_bg)
+    local mr, mg, mb, ma = ui.get(clr1)
+    local a1r, a1g, a1b, a1a = ui.get(ac1)
+    local a2r, a2g, a2b, a2a = ui.get(ac2)
+
+    local sliders = { }
+    local key_states = { }
+
+    if ui.get(ind_enabled) then
+        if (contains(ui.get(ind_options), "Fake lag")) then
+            sliders[#sliders + 1] = {
+                fill = math.min(choked / (ui.get(maxprocessticks) -2)),
+                lbl = "chk: ",
+                val = tostring(choked)
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Desync")) then
+            local _bodyyaw = entity.get_prop(me, "m_flPoseParameter", 11) * 116 - 58
+            sliders[#sliders + 1] = {
+                fill = math.abs(_bodyyaw) / 58,
+                lbl = "dsy: ",
+                val = tostring(math.floor(_bodyyaw))
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Accuracy")) then
+            local acc = shots.hit / (shots.miss + shots.hit)
+
+            if (acc ~= acc) then
+                acc = 1
+            end
+            
+            sliders[#sliders + 1] = {
+                fill = acc,
+                lbl = "hit: ",
+                val = tostring(math.floor(acc * 100)) .. "%"
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Speed")) then
+            local vel = vec_3(entity.get_prop(me, "m_vecVelocity"))
+            local speed = math.sqrt(vel.x^2 + vel.y^2)
+
+            sliders[#sliders + 1] = {
+                fill = math.min(1, speed / 300),
+                lbl = "spd: ",
+                val = tostring(math.floor(speed))
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Head height")) then
+            local duck_amount = entity.get_prop(me, "m_flDuckAmount")
+
+            if duck_amount == 0 then
+                duck_amount = 1
+            elseif duck_amount == 1 then
+                duck_amount = 0
+            end
+
+            sliders[#sliders + 1] = {
+                fill = duck_amount,
+                lbl = "hgt: ",
+                val = ""
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Ping spike")) then
+            local ping_extra = tonumber(entity.get_prop(entity.get_player_resource(), "m_iPing", me) or 0)-client.latency()*1000-5
+            local ping = math.min(1, math.max(0, ping_extra / ui.get(ping_spike[3])))
+            
+            sliders[#sliders + 1] = {
+                fill = ping,
+                lbl = "ping: ",
+                val = tostring(ping_extra)
+            }
+        end
+
+        if (contains(ui.get(ind_options), "Damage")) then
+            local dmg = math.min(ui.get(minimum_damage) / 100, 1)
+
+            if (dmg ~= dmg) then
+                dmg = 1
+            end
+            
+            sliders[#sliders + 1] = {
+                fill = dmg,
+                lbl = "dmg: ",
+                val = tostring(ui.get(minimum_damage))
+            }
+        end
+
+        local lbl_sz = 22
+
+        renderer.draw_filled_rect(x, y , size.x / 2 - 1, 20 + (get_tbl_count(sliders) * 14), bgr, bgg, bgb, bga)
+        renderer.draw_filled_rect(x, y + 16, size.x / 2 - 1, 1, mr, mg, mb, ma)
+        renderer.draw_text(x + 4, y + 3, 255, 255, 255, 255, c_font, "Monke")
+
+        for i = 1, #sliders do 
+            local val_sz = renderer.get_text_size(c_font, sliders[i].val)
+
+            renderer.draw_text(x + 4, y + (i * 14) + 5, 255, 255, 255, 255, c_font, sliders[i].lbl)
+            renderer.draw_filled_rect(x + lbl_sz + 4, y + (i * 14) + 8, (size.x / 2 - 5) - (11 + lbl_sz), 6, a1r, a1g, a1b, a1a)
+            renderer.draw_filled_gradient_rect(x + lbl_sz + 5, y + (i * 14) + 9, ((size.x / 2 - 1) - (12 + lbl_sz)) * sliders[i].fill, 4, a1r, a1g, a1b, a1a, a2r, a2g, a2b, a2a, true)
+            renderer.draw_text(x + ((size.x / 2 - 1) - val_sz - 10), y + (i * 14) + 5, 255, 255, 255, 255, c_font, sliders[i].val)
+        end
+    end
+
+    if ui.get(key_enabled) then
+        if ui.get(onshot[1]) and ui.get(onshot[2]) then
+            key_states[#key_states + 1] = "hide shots"
+        end
+
+        if ui.get(doubletap[1]) and ui.get(doubletap[2]) then
+            key_states[#key_states + 1] = "double tap"
+        end
+
+
+        if ui.get(freestanding[1]) and ui.get(freestanding[2]) then
+            key_states[#key_states + 1] = "freestanding"
+        end
+
+        if ui.get(force_baim) then
+            key_states[#key_states + 1] = "force baim"
+        end
+		
+        if ui.get(force_safe) then
+            key_states[#key_states + 1] = "force safety"
+        end
+
+        if ui.get(duck_peek) then
+            key_states[#key_states + 1] = "fake duck"
+        end
+        
+        if ui.get(duck_peek) then
+            key_states[#key_states + 1] = "fake duck"
+        end
+		
+        renderer.draw_filled_rect(x + (size.x / 2 + 1 ), y, (size.x / 2 - 55), 20 + (get_tbl_count(key_states) * 14), bgr, bgg, bgb, bga)
+        renderer.draw_filled_rect(x + (size.x / 2 + 1 ), y + 16, (size.x / 2 - 55), 1, mr, mg, mb, ma)
+        renderer.draw_text(x + (size.x / 2 + 1 ) + 4, y + 3, 255, 255, 255, 255, c_font, "keys")
+    
+        for i = 1, #key_states do
+            renderer.draw_text(x + (size.x / 2 + 1) + 4, y + (i * 14) + 5, 255, 255, 255, 255, c_font, key_states[i])
+        end
+    end
+
+    region:drag(size.x, 20 + (get_tbl_count(sliders) * 14))
+end
+
+--#endregion
+
+--#region VISIBILITY
+local update_visibility = function()
+    local script_state = ui.get(enabled)
+    local ind_state = ui.get(ind_enabled)
+
+    multi_exec(ui.set_visible, {
+        [clr_bg] = script_state,
+
+        [lbl_clr1] = script_state,
+        [clr1] = script_state,
+        [lbl_ac1] = script_state,
+        [ac1] = script_state,
+        [lbl_ac2] = script_state,
+        [ac2] = script_state,
+
+        [ind_enabled] = script_state,
+        [ind_options] = script_state and ind_state,
+        [ind_remove] = script_state and ind_state,
+
+        [key_enabled] = script_state
+    })
+end
+--#endregion
+
+--INITIALIZATION
+local script_toggled = function()
+    local state = ui.get(enabled)
+
+    update_visibility()
+
+    local update_callback = state and client.set_event_callback or client.unset_event_callback
+    
+    update_callback("player_hurt", on_player_hurt)
+    update_callback("aim_miss", on_aim_miss)
+    update_callback("player_connect_full", on_player_connect_full)
+    update_callback("setup_command", on_setup_command)
+    update_callback("paint", on_paint)
+end
+
+script_toggled()
+ui.set_callback(enabled, script_toggled)
+ui.set_callback(ind_enabled, script_toggled)
+
+-- Indicator End
+
+
+
+-- DT
+
+local tickcount = globals_tickcount
+local lasttick = tickcount()
+
+local nextAttack = 0
+local nextShotSecondary = 0
+local nextShot = 0
+local ref_doubletap = { ui.reference("RAGE", "Other", "Double Tap") }
+
+local function is_dt()
+
+    local dt = false
+
+    local local_player = entity.get_local_player()
+
+    if local_player == nil then
+        return
+    end
+
+    if not entity.is_alive(local_player) then
+        return
+    end
+
+    local active_weapon = entity.get_prop(local_player, "m_hActiveWeapon")
+
+    if active_weapon == nil then
+        return
+    end
+
+    nextAttack = entity.get_prop(local_player,"m_flNextAttack")
+    nextShot = entity.get_prop(active_weapon,"m_flNextPrimaryAttack")
+    nextShotSecondary = entity.get_prop(active_weapon,"m_flNextSecondaryAttack")
+
+    if nextAttack == nil or nextShot == nil or nextShotSecondary == nil then
+        return
+    end
+
+    nextAttack = nextAttack + 0.5
+    nextShot = nextShot + 0.5
+    nextShotSecondary = nextShotSecondary + 0.5
+
+    if ui.get(ref_doubletap[1]) and ui.get(ref_doubletap[2]) then
+        if math.max(nextShot,nextShotSecondary) < nextAttack then -- swapping
+            if nextAttack - globals.curtime() > 0.00 then
+                dt = false --client.draw_indicator(ctx, 255, 0, 0, 255, "DT")
+            else
+                dt = true --client.draw_indicator(ctx, 0, 255, 0, 255, "DT")
+            end
+        else -- shooting or just shot
+            if math.max(nextShot,nextShotSecondary) - globals.curtime() > 0.00  then
+                dt = false --client.draw_indicator(ctx, 255, 0, 0, 255, "DT")
+            else
+                if math.max(nextShot,nextShotSecondary) - globals.curtime() < 0.00  then
+                    dt = true --client.draw_indicator(ctx, 0, 255, 0, 255, "DT")
+                else
+                    dt = true --client.draw_indicator(ctx, 0, 255, 0, 255, "DT")
+                end
+            end
+        end
+    end
+
+    return dt
+end
+
+-- min dmg override
+local change = false
+
+-- hp values
+local hp_values = {
+[0] = "Auto", [1] = "1", [2] = "2", [3] = "3", [4] = "4", [5] = "5", [6] = "6", [7] = "7", [8] = "8", [9] = "9", [10] = "10", [11] = "11", [12] = "12", [13] = "13", [14] = "14", [15] = "15", [16] = "16", [17] = "17", [18] = "18", [19] = "19", [20] = "20", [21] = "21", [22] = "22", [23] = "23", [24] = "24", [25] = "25", [26] = "26", [27] = "27", [28] = "28", [29] = "29", [30] = "30", [31] = "31", [32] = "32", [33] = "33", [34] = "34", [35] = "35", [36] = "36", [37] = "37", [38] = "38", [39] = "39", [40] = "40", [41] = "41", [42] = "42", [43] = "43", [44] = "44", [45] = "45", [46] = "46", [47] = "47", [48] = "48", [49] = "49", [50] = "50", [51] = "51", [52] = "52", [53] = "53", [54] = "54", [55] = "55", [56] = "56", [57] = "57", [58] = "58", [59] = "59", [60] = "60", [61] = "61", [62] = "62", [63] = "63", [64] = "64", [65] = "65", [66] = "66", [67] = "67", [68] = "68", [69] = "69", [70] = "70", [71] = "71", [72] = "72", [73] = "73", [74] = "74", [75] = "75", [76] = "76", [77] = "77", [78] = "78", [79] = "79", [80] = "80", [81] = "81", [82] = "82", [83] = "83", [84] = "84", [85] = "85", [86] = "86", [87] = "87", [88] = "88", [89] = "89", [90] = "90", [91] = "91", [92] = "92", [93] = "93", [94] = "94", [95] = "95", [96] = "96", [97] = "97", [98] = "98", [99] = "99", [100] = "100", [101] = "HP+1", [102] = "HP+2", [103] = "HP+3" ,[104] = "HP+4", [105] = "HP+5", [106] = "HP+6", [107] = "HP+7", [108] = "HP+8", [109] = "HP+9", [110] = "HP+10", [111] = "HP+11", [112] = "HP+12", [113] = "HP+13", [114] = "HP+14", [115] = "HP+15", [116] = "HP+16", [117] = "HP+17", [118] = "HP+18", [119] = "HP+19", [120] = "HP+20", [121] = "HP+21", [122] = "HP+22", [123] = "HP+23", [124] = "HP+24", [125] = "HP+25", [126] = "HP+26",
+}
+
+-- Creating keys etc
+local slider_dmg = ui.new_slider('rage', 'other', 'Minimum damage Override', 0, 126, 16, true, "", 0,hp_values)
+local mindmghotkey = ui.new_hotkey('rage', 'other', 'Override Damage', true)
+local min_dmg = ui.reference('rage', 'aimbot', 'minimum damage')
+ui.set(mindmghotkey, "on hotkey")
+
+-- Min damage change function
+local function changed(c)
+local h_key = ui.get(mindmghotkey)
+local dmg_slider_ref = ui.get(slider_dmg)
+
+	if h_key and change == false then
+		stored_dmg = ui.get(min_dmg)
+		ui.set(min_dmg, dmg_slider_ref)
+		change = true
+	elseif not h_key and change == true then
+		ui.set(min_dmg, stored_dmg)
+		change = false
+	end	
+		
+	if change then
+		
+	end		
+end
+
+client.set_event_callback("paint", changed)
+-- end
+
+-- Table functions
+
+local function includes( table, key )
+    local state = false
+    for i=1, #table do
+        if table[i] == key then
+            state = true
+            break
+        end
+    end 
+    return state 
+end
+
+local function setTableVisibility(table, state)
+    for i=1, #table do
+        ui.set_visible(table[i], state)
+    end
+end
+
+local function handleGUI()
+    local enabled = ui.get(Monke_yes)
+    setTableVisibility({AA_modes, warning, warning1, hideskeet, Monkespeed, autoinvert}, Monke_yes)
+    setTableVisibility({ab_range}, enabled and ui.get(check))
+	setTableVisibility({AA_EnabledButton, AA_Pitch, AA_Yaw_Base, AA_yaw, AA_yaw_s, AA_j_yaw, AA_j_yaw_s, AA_b_yaw, AA_b_yaw_s, AA_fby, AA_edgeyaw, AA_lbyt, AA_fyaw_limit, AA_freestanding}, Monke_yes and ui.get(hideskeet))
+  end
+-- end of tables
+
+-- Anti-Brute
+
+local function GetClosestPoint(A, B, P)
+	local a_to_p = { P[1] - A[1], P[2] - A[2] }
+	local a_to_b = { B[1] - A[1], B[2] - A[2] }
+
+	local atb2 = a_to_b[1]^2 + a_to_b[2]^2
+
+	local atp_dot_atb = a_to_p[1]*a_to_b[1] + a_to_p[2]*a_to_b[2]
+	local t = atp_dot_atb / atb2
+	
+	return { A[1] + a_to_b[1]*t, A[2] + a_to_b[2]*t }
+end
+
+local should_swap = false
+local it = 0
+local angles = { 60, 20, -60 }
+client.set_event_callback("bullet_impact", function(c)
+	if not ui.get(enabled) or ui.get(invert) then
+		return
+	end
+	if ui.get(check) and entity.is_alive(entity.get_local_player()) then
+		local ent = client.userid_to_entindex(c.userid)
+		if not entity.is_dormant(ent) and entity.is_enemy(ent) then
+			local ent_shoot = { entity.get_prop(ent, "m_vecOrigin") }
+			ent_shoot[3] = ent_shoot[3] + entity.get_prop(ent, "m_vecViewOffset[2]")
+			local player_head = { entity.hitbox_position(entity.get_local_player(), 0) }
+			local closest = GetClosestPoint(ent_shoot, { c.x, c.y, c.z }, player_head)
+			local delta = { player_head[1]-closest[1], player_head[2]-closest[2] }
+			local delta_2d = math.sqrt(delta[1]^2+delta[2]^2)
+		
+			if math.abs(delta_2d) < ui.get(ab_range) then
+				it = it + 1
+				should_swap = true
+			end
+		end
+	end
+end)
+
+client.set_event_callback("run_command", function(c)
+	if not ui.get(enabled) or ui.get(invert) then
+		return
+	end
+		if ui.get(check) and should_swap then
+			local _combo = ui.get(combo)
+			if _combo == "Random" then
+				ui.set(AA_b_yaw_s, math.random(-60, 60))
+                ui.set(AA_fyaw_limit, math.random(38, 55))
+			end
+            should_swap = false
+		end
+end)
+
+-- Anti-Aim Presets
+
+local function Anti_aimrun()
+    if ui.get(enabled) == false then
+        return
+    end
+
+    if ui.get(AA_modes) == "Disabled" then	
+			end	
+	if ui.get(AA_modes) == "Antibrute" then
+			ui.set(check, true)
+            ui.set(combo, "Random")
+        end	
+        
+	if ui.get(AA_modes) == "Simple" then
+			if ui.get(invert) then
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, -5)
+				ui.set(AA_Pitch, "Default")
+				ui.set(AA_b_yaw_s, -170)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, false)
+				ui.set(AA_fyaw_limit, 25)
+			else
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, 5)
+				ui.set(AA_Pitch, "Default")
+				ui.set(AA_b_yaw_s, -170)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, false)
+				ui.set(AA_fyaw_limit, 25)
+			end
+		end
+	if ui.get(AA_modes) == "Testing" then
+			if ui.get(invert) then
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, math.random(-5, -2))
+				ui.set(AA_Pitch, "Minimal")
+				ui.set(AA_b_yaw_s, -93)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(45, 55))
+			else
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, math.random(1, 5))
+				ui.set(AA_Pitch, "Minimal")
+				ui.set(AA_b_yaw_s, 80)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(45, 55))
+			end	
+		end	
+		if ui.get(AA_modes) == "Low delta" then
+			if ui.get(invert) then
+				ui.set(check, false)
+				ui.set(AA_Yaw_Base, "At targets")
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, -1)
+				ui.set(AA_Pitch, "Default")
+				ui.set(AA_b_yaw_s, -10)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(45, 55))
+			else
+				ui.set(check, false)
+				ui.set(AA_Yaw_Base, "At targets")
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, 1)
+				ui.set(AA_Pitch, "Default")
+				ui.set(AA_b_yaw_s, 10)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(45, 55))
+			end	
+		end
+	if ui.get(AA_modes) == "Advanced" then
+			if ui.get(invert) then
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, -8)
+				ui.set(AA_Pitch, "Minimal")
+				ui.set(AA_b_yaw_s, -83)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(25, 59))
+			else
+				ui.set(check, false)
+				ui.set(AA_yaw, "180")
+				ui.set(AA_yaw_s, 8)
+				ui.set(AA_Pitch, "Minimal")
+				ui.set(AA_b_yaw_s, 116)
+				ui.set(AA_b_yaw, "Static")
+				ui.set(AA_lbyt, "Eye Yaw")
+				ui.set(AA_fby, true)
+				ui.set(AA_fyaw_limit, math.random(25, 55))
+			end
+		end
+	if ui.get(Monkeepeek) then
+            ui.set(AA_yaw_s, -180)
+			ui.set(AA_b_yaw_s, math.random(-30, 30))
+			ui.set(AA_b_yaw, "Static")
+			ui.set(AA_lbyt, "Eye Yaw")
+			ui.set(AA_Pitch, "Off")
+            ui.set(AA_fby, true)
+            ui.set(AA_edgeyaw, false)
+			ui.set(AA_fyaw_limit, 55)
+		else return
+	end
+end
+
+-- Double tap speed
+
+local function Monkedt()
+	ui.set(FL_limit, math.min(14, ui.get(FL_limit)))
+	if ui.get(Monkespeed) then
+		ui.set(double_tap, true)
+		ui.set(double_tap_FL_limit, 1)
+		ui.set(double_tap_mode, "Offensive")
+		
+		if ui.get(Monkespeed_mode) == "Spicy" then
+			ui.set(sv_maxusrcmdprocessticks, 16)
+			cvar.cl_clock_correction:set_int(1)
+			return
+		end
+	end
+	
+	ui.set(sv_maxusrcmdprocessticks, 16)
+	cvar.cl_clock_correction:set_int(1)
+end
+
+ui.set_callback(Monkespeed, Monkedt)
+ui.set_callback(Monkespeed_mode, Monkedt)
+ui.set_callback(FL_limit, Monkedt)
+
+client.set_event_callback("shutdown", function()
+	ui.set(Monkespeed, false)
+	Monkedt()
+end)
+
+-- DT Speed End
+
+
+-- Callbacks
+client.set_event_callback("run_command", Anti_aimrun) 
+client.set_event_callback("paint_ui", handleGUI)
+client_set_event_callback("shutdown", function()
+
+
+	end)
+end
+
+cvar.cl_clock_correction:set_int(1)
+lbl3 = ui.new_label("AA","Anti-aimbot angles", "                                ", enabled)
+Monke_login = ui.new_button("AA", "Anti-aimbot angles", "Enter", enabled)
+
+
+notify:paint(15, "If entering doesnt work DM jordie#0984")
+notify:paint(10, "Click the Enter Button")
+notify:paint(5, "Loading Monke")
